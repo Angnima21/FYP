@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Home</title>
+  <style>
+    body {
+        font-family: 'Poppins', sans-serif;
+        background: linear-gradient(to right, #141e30, #243b55);
+        color: #fff;
+        text-align: center;
+        padding: 50px;
+    }
+    a {
+        color: #23a2f6;
+        text-decoration: none;
+    }
+    a:hover {
+        text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <h1>Welcome to the Home Page</h1>
+  {% if user.is_authenticated %}
+    <p>Hello, {{ user.username }}!</p>
+    <a href="{% url 'logout' %}">Logout</a>
+  {% else %}
+    <p>You are not logged in.</p>
+    <a href="{% url 'auth' %}?action=login">Login</a> | 
+    <a href="{% url 'auth' %}?action=register">Sign Up</a>
+  {% endif %}
+</body>
+</html>

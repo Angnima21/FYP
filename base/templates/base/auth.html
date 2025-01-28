@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>{{ title }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <style>
+    /* General Reset */
+    *, *:before, *:after {
+        padding: 0;
+        margin: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: 'Poppins', sans-serif;
+        background: linear-gradient(to right, #141e30, #243b55);
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .background {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: -1;
+    }
+
+    .background .shape {
+        height: 150px;
+        width: 150px;
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(50px);
+    }
+
+    .background .shape:first-child {
+        background: rgba(24, 69, 173, 0.8); /* Blue shape */
+        left: -80px;
+        top: -80px;
+    }
+
+    .background .shape:last-child {
+        background: rgba(255, 81, 47, 0.8); /* Red shape */
+        right: -30px;
+        bottom: -80px;
+    }
+
+    form {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        padding: 40px 30px;
+        width: 400px;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 1.5s ease-out;
+    }
+
+    form h3 {
+        color: #fff;
+        font-size: 28px;
+        margin-bottom: 20px;
+    }
+
+    label {
+        display: block;
+        color: #e0e0e0;
+        margin-top: 20px;
+        font-size: 14px;
+        text-align: left;
+    }
+
+    input {
+        width: 100%;
+        padding: 10px;
+        margin-top: 8px;
+        border: none;
+        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+        font-size: 14px;
+    }
+
+    input:focus {
+        background: rgba(255, 255, 255, 0.3);
+        outline: none;
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+    }
+
+    input::placeholder {
+        color: #ccc;
+    }
+
+    button {
+        width: 100%;
+        padding: 12px 0;
+        margin-top: 20px;
+        background: linear-gradient(to right, #23a2f6, #1845ad);
+        color: #fff;
+        font-size: 16px;
+        font-weight: 600;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: 0.3s ease;
+    }
+
+    button:hover {
+        background: linear-gradient(to right, #1845ad, #23a2f6);
+        box-shadow: 0 8px 15px rgba(24, 69, 173, 0.5);
+    }
+
+    a {
+        display: block;
+        margin-top: 20px;
+        color: #23a2f6;
+        font-size: 14px;
+        text-decoration: none;
+        transition: color 0.3s ease;
+    }
+
+    a:hover {
+        color: #1845ad;
+        text-decoration: underline;
+    }
+
+    /* Smooth fade-in effect */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .error {
+        color: #ff6b6b;
+        font-size: 14px;
+        margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="background">
+      <div class="shape"></div>
+      <div class="shape"></div>
+  </div>
+  <form method="post">
+      <h3>{{ title }}</h3>
+      {% csrf_token %}
+      
+      {% if form.errors %}
+        <div class="error">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <p>{{ error }}</p>
+            {% endfor %}
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if is_login %}
+        <!-- Login Form -->
+        <label for="id_username">Username</label>
+        <input type="text" id="id_username" name="username" placeholder="Enter your username" required>
+
+        <label for="id_password">Password</label>
+        <input type="password" id="id_password" name="password" placeholder="Enter your password" required>
+
+        <button type="submit">Log In</button>
+        <a href="{% url 'auth' %}?action=register">Don't have an account? Sign Up</a>
+      {% else %}
+        <!-- Registration Form -->
+        <label for="id_username">Username</label>
+        <input type="text" id="id_username" name="username" placeholder="Enter your username" required>
+
+        <label for="id_password1">Password</label>
+        <input type="password" id="id_password1" name="password1" placeholder="Enter your password" required>
+
+        <label for="id_password2">Confirm Password</label>
+        <input type="password" id="id_password2" name="password2" placeholder="Confirm your password" required>
+
+        <button type="submit">Sign Up</button>
+        <a href="{% url 'auth' %}?action=login">Already have an account? Log In</a>
+      {% endif %}
+  </form>
+</body>
+</html>
