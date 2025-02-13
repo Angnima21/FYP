@@ -27,10 +27,11 @@ class Inventory(models.Model):
     def __str__(self):
         return f"{self.ProductID.ProductName} - Batch {self.BatchNumber}"
 
+
 class Order(models.Model):
     OrderID = models.AutoField(primary_key=True)
-    UserID = models.ForeignKey(User, on_delete=models.CASCADE)  # Use the imported User model
-    OrderDate = models.DateField(auto_now_add=True)
+    UserID = models.ForeignKey(User, on_delete=models.CASCADE)
+    OrderDate = models.DateTimeField(auto_now_add=True)
     TotalAmount = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
@@ -38,14 +39,19 @@ class Order(models.Model):
 
 class OrderDetails(models.Model):
     OrderDetailsID = models.AutoField(primary_key=True)
-    OrderID = models.ForeignKey(Order, on_delete=models.CASCADE)
-    ProductID = models.ForeignKey(Product, on_delete=models.CASCADE)
+    OrderID = models.ForeignKey('Order', on_delete=models.CASCADE, related_name='order_details')
+    ProductID = models.ForeignKey('Product', on_delete=models.CASCADE)
     Quantity = models.IntegerField()
     UnitPrice = models.DecimalField(max_digits=10, decimal_places=2)
-    Subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    Subtotal = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
+
+    def save(self, *args, **kwargs):
+        # Calculate subtotal before saving
+        self.Subtotal = self.Quantity * self.UnitPrice
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Order {self.OrderID.OrderID} - {self.ProductID.ProductName}"
+        return f"{self.ProductID.ProductName} - {self.Quantity} units"
 
 class Supplier(models.Model):
     SupplierID = models.AutoField(primary_key=True)

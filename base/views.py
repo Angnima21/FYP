@@ -1,13 +1,13 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth import login, logout
 from django.utils import timezone
 from .models import Product, Inventory, Order
 from .forms import ProductForm, InventoryForm
 from .models import Supplier, OrderDetails
-from .forms import SupplierForm, OrderForm
-
-
+from .forms import SupplierForm, OrderForm, OrderDetailsForm
+from django.db.models import F
+from django.http import Http404
 
 
 def inventory_list(request):
@@ -86,6 +86,61 @@ def add_product(request):
         form = ProductForm()
     return render(request, 'base/add_product.html', {'form': form})
 
+
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import Http404
+from .models import Product, Order
+from .forms import ProductForm, OrderForm
+
+def edit_item(request, item_type, item_id):
+    """
+    Generic view to edit a product or order.
+    """
+    if item_type == 'product':
+        model = Product
+        form_class = ProductForm
+        redirect_url = 'product_list'
+    elif item_type == 'order':
+        model = Order
+        form_class = OrderForm
+        redirect_url = 'order_list'
+    else:
+        raise Http404("Invalid item type.")
+
+    item = get_object_or_404(model, pk=item_id)
+
+    if request.method == 'POST':
+        form = form_class(request.POST, instance=item)
+        if form.is_valid():
+            form.save()
+            return redirect(redirect_url)
+    else:
+        form = form_class(instance=item)
+
+    return render(request, 'base/edit_item.html', {'form': form, 'item': item, 'item_type': item_type})
+
+def delete_item(request, item_type, item_id):
+    """
+    Generic view to delete a product or order.
+    """
+    if item_type == 'product':
+        model = Product
+        redirect_url = 'product_list'
+    elif item_type == 'order':
+        model = Order
+        redirect_url = 'order_list'
+    else:
+        raise Http404("Invalid item type.")
+
+    item = get_object_or_404(model, pk=item_id)
+
+    if request.method == 'POST':
+        item.delete()
+        return redirect(redirect_url)
+
+    return render(request, 'base/confirm_delete.html', {'item': item, 'item_type': item_type})
+
 ###############################################################################
 
 def inventory_list(request):
@@ -109,15 +164,78 @@ def order_list(request):
     return render(request, 'base/order_list.html', {'orders': orders})
 
 
+def order_details(request, order_id):
+    # Fetch the order and its details
+    order = get_object_or_404(Order, OrderID=order_id)
+    order_details = order.order_details.all()  # Use the related_name 'order_details'
+
+    return render(request, 'base/order_details.html', {'order': order, 'order_details': order_details})
+
+
+
+
 def create_order(request):
     if request.method == 'POST':
-        form = OrderForm(request.POST)
-        if form.is_valid():
-            form.save()
+        order_form = OrderForm(request.POST)
+        if order_form.is_valid():
+            order = order_form.save(commit=False)
+            order.TotalAmount = 0  # Initialize total amount
+            order.save()
+
+            # Process each product in the order
+            for key, value in request.POST.items():
+                if key.startswith('product_'):
+                    product_id = key.split('_')[1]
+                    quantity = int(value)  # Convert quantity to integer
+                    if quantity <= 0:
+                        continue  # Skip if quantity is zero or negative
+
+                    product = Product.objects.get(ProductID=product_id)
+                    unit_price = float(product.UnitPrice)  # Convert unit price to float
+
+                    # Create OrderDetails
+                    OrderDetails.objects.create(
+                        OrderID=order,
+                        ProductID=product,
+                        Quantity=quantity,
+                        UnitPrice=unit_price
+                    )
+
+                    # Update the total amount
+                    order.TotalAmount += quantity * unit_price
+
+                    # Deduct the ordered quantity from inventory (FIFO)
+                    deduct_stock(product_id, quantity)
+
+            # Save the updated total amount
+            order.save()
             return redirect('order_list')
     else:
-        form = OrderForm()
-    return render(request, 'base/create_order.html', {'form': form})
+        order_form = OrderForm()
+        products = Product.objects.all()
+    return render(request, 'base/create_order.html', {'order_form': order_form, 'products': products})
+
+def deduct_stock(product_id, quantity):
+    """
+    Deduct the ordered quantity from inventory using FIFO.
+    """
+    # Fetch inventory batches for the product, ordered by PurchaseDate (FIFO)
+    batches = Inventory.objects.filter(ProductID=product_id).order_by('PurchaseDate')
+
+    for batch in batches:
+        if quantity <= 0:
+            break  # Stop if the required quantity is deducted
+
+        if batch.Quantity >= quantity:
+            # Deduct the full quantity from this batch
+            batch.Quantity = F('Quantity') - quantity
+            batch.save()
+            quantity = 0
+        else:
+            # Deduct the entire batch's quantity
+            quantity -= batch.Quantity
+            batch.Quantity = 0
+            batch.save()
 
 ###########################################################################
 
@@ -148,3 +266,4 @@ def add_supplier(request):
     else:
         form = SupplierForm()
     return render(request, 'base/add_supplier.html', {'form': form})
+
