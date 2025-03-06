@@ -87,12 +87,6 @@ def add_product(request):
     return render(request, 'base/add_product.html', {'form': form})
 
 
-
-from django.shortcuts import render, redirect, get_object_or_404
-from django.http import Http404
-from .models import Product, Order
-from .forms import ProductForm, OrderForm
-
 def edit_item(request, item_type, item_id):
     """
     Generic view to edit a product or order.
@@ -111,14 +105,63 @@ def edit_item(request, item_type, item_id):
     item = get_object_or_404(model, pk=item_id)
 
     if request.method == 'POST':
-        form = form_class(request.POST, instance=item)
-        if form.is_valid():
-            form.save()
-            return redirect(redirect_url)
-    else:
-        form = form_class(instance=item)
+        if item_type == 'order':
+            # Handle order details for orders
+            order_form = form_class(request.POST, instance=item)
+            if order_form.is_valid():
+                order = order_form.save(commit=False)
+                order.TotalAmount = 0  # Reset total amount for recalculation
+                order.save()
 
-    return render(request, 'base/edit_item.html', {'form': form, 'item': item, 'item_type': item_type})
+                # Process each product in the order
+                for key, value in request.POST.items():
+                    if key.startswith('product_'):
+                        product_id = key.split('_')[1]
+                        quantity = int(value)  # Convert quantity to integer
+                        product = Product.objects.get(ProductID=product_id)
+                        unit_price = float(product.UnitPrice)  # Get unit price from the product
+
+                        # Update or create OrderDetails
+                        OrderDetails.objects.update_or_create(
+                            OrderID=order,
+                            ProductID=product,
+                            defaults={'Quantity': quantity, 'UnitPrice': unit_price}
+                        )
+
+                        # Update the total amount
+                        order.TotalAmount += quantity * unit_price
+
+                # Save the updated total amount
+                order.save()
+                return redirect(redirect_url)
+        else:
+            # Handle products
+            form = form_class(request.POST, instance=item)
+            if form.is_valid():
+                form.save()
+                return redirect(redirect_url)
+    else:
+        if item_type == 'order':
+            # Pre-fill the form with the current order data
+            order_form = form_class(instance=item)
+            order_details = item.order_details.all()
+            products = Product.objects.all()
+
+            # Create a dictionary to store product quantities
+            product_quantities = {detail.ProductID.ProductID: detail.Quantity for detail in order_details}
+
+            return render(request, 'base/edit_item.html', {
+                'form': order_form,
+                'item': item,
+                'item_type': item_type,
+                'order_details': order_details,
+                'products': products,
+                'product_quantities': product_quantities,  # Pass product quantities to the template
+            })
+        else:
+            # Pre-fill the form with the current product data
+            form = form_class(instance=item)
+            return render(request, 'base/edit_item.html', {'form': form, 'item': item, 'item_type': item_type})
 
 def delete_item(request, item_type, item_id):
     """
@@ -159,10 +202,30 @@ def add_inventory(request):
 
 ############################################################################
 
+
 def order_list(request):
     orders = Order.objects.all()
-    return render(request, 'base/order_list.html', {'orders': orders})
+    order_data = []
 
+    for order in orders:
+        # Fetch all order details for the current order
+        order_details = order.order_details.all()
+        products = []
+
+        # Collect product names and quantities
+        for detail in order_details:
+            products.append({
+                'name': detail.ProductID.ProductName,
+                'quantity': detail.Quantity,
+            })
+
+        # Add order data to the list
+        order_data.append({
+            'order': order,
+            'products': products,
+        })
+
+    return render(request, 'base/order_list.html', {'order_data': order_data})
 
 def order_details(request, order_id):
     # Fetch the order and its details
@@ -170,7 +233,6 @@ def order_details(request, order_id):
     order_details = order.order_details.all()  # Use the related_name 'order_details'
 
     return render(request, 'base/order_details.html', {'order': order, 'order_details': order_details})
-
 
 
 
@@ -187,32 +249,45 @@ def create_order(request):
                 if key.startswith('product_'):
                     product_id = key.split('_')[1]
                     quantity = int(value)  # Convert quantity to integer
-                    if quantity <= 0:
-                        continue  # Skip if quantity is zero or negative
 
-                    product = Product.objects.get(ProductID=product_id)
-                    unit_price = float(product.UnitPrice)  # Convert unit price to float
+                    try:
+                        # Fetch the product
+                        product = Product.objects.get(ProductID=product_id)
+                        unit_price = float(product.UnitPrice)  # Get unit price from the product
 
-                    # Create OrderDetails
-                    OrderDetails.objects.create(
-                        OrderID=order,
-                        ProductID=product,
-                        Quantity=quantity,
-                        UnitPrice=unit_price
-                    )
+                        # Create OrderDetails
+                        OrderDetails.objects.create(
+                            OrderID=order,
+                            ProductID=product,
+                            Quantity=quantity,
+                            UnitPrice=unit_price
+                        )
 
-                    # Update the total amount
-                    order.TotalAmount += quantity * unit_price
+                        # Update the total amount
+                        order.TotalAmount += quantity * unit_price
 
-                    # Deduct the ordered quantity from inventory (FIFO)
-                    deduct_stock(product_id, quantity)
+                        # Update product stock based on order type
+                        if order.OrderType == 'dealer':
+                            # Increase stock for dealer orders
+                            product.ReorderLevel += quantity
+                        elif order.OrderType == 'customer':
+                            # Decrease stock for customer orders
+                            product.ReorderLevel -= quantity
+
+                        # Save the updated product stock
+                        product.save()
+
+                    except Product.DoesNotExist:
+                        # Handle the case where the product does not exist
+                        print(f"Product with ID {product_id} does not exist.")
+                        continue  # Skip this product
 
             # Save the updated total amount
             order.save()
             return redirect('order_list')
     else:
         order_form = OrderForm()
-        products = Product.objects.all()
+        products = Product.objects.all()  # Fetch all products
     return render(request, 'base/create_order.html', {'order_form': order_form, 'products': products})
 
 def deduct_stock(product_id, quantity):
